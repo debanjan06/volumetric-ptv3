@@ -20,12 +20,14 @@ def run_production_training():
     train_loader = DataLoader(dataset, batch_size=2, shuffle=True)
 
     # 2. Instantiate our core network layers matching our configuration
-    # In features = 1 (intensity), out features = 16 (embedding dimensionality)
     model = BimodalQATLinear(in_features=1, out_features=16, bit_width=8)
     criterion = VolumetricCoherenceLoss()
     evaluator = VolumetricPerceptionEvaluator(num_classes=16)
     
     optimizer = optim.Adam(model.parameters(), lr=0.01)
+
+    # Track loss initialization safely to avoid NameErrors
+    last_computed_loss = None
 
     # 3. Training iteration loop over real files
     model.train()
@@ -34,7 +36,6 @@ def run_production_training():
             optimizer.zero_grad()
             
             # Form target ground truth maps [batch, points, classes]
-            # Convert class indices to one-hot embedding shapes for our loss layer
             batch_size, points_count, _ = features.shape
             labels_one_hot = torch.zeros(batch_size, points_count, 16)
             
@@ -52,13 +53,13 @@ def run_production_training():
             loss.backward()
             optimizer.step()
             
-            print(f"\n   [Batch {batch_idx + 1}] Loss Convergence: {loss.item():.5f}")
+            last_computed_loss = loss.item()
+            print(f"\n   [Batch {batch_idx + 1}] Loss Convergence: {last_computed_loss:.5f}")
             
             # 4. Profile the performance metrics of the trained batch immediately
             model.eval()
             with torch.no_grad():
                 test_preds = model(features)
-                # Profile the first batch item using our metrics engine
                 _ = evaluator.generate_scientific_report(
                     coords[0], test_preds[0], labels_one_hot[0]
                 )
@@ -66,6 +67,21 @@ def run_production_training():
 
     print("\n==========================================================")
     print("-> Live Training and Evaluation Sequence Successfully Validated.")
+    
+    # Save the optimized QAT model parameters if training completed batches
+    if last_computed_loss is not None:
+        checkpoint_directory = "models"
+        os.makedirs(checkpoint_directory, exist_ok=True)
+        weight_path = os.path.join(checkpoint_directory, "volumetric_ptv3_qat_8bit.pth")
+        
+        torch.save({
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'final_loss': last_computed_loss
+        }, weight_path)
+        print(f"-> Production model checkpoint compiled successfully at: {weight_path}")
+    else:
+        print("-> [Warning] No training batches were executed. Checkpoint bypassed.")
 
 if __name__ == "__main__":
     run_production_training()
