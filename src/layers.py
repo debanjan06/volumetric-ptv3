@@ -3,26 +3,29 @@ import torch.nn as nn
 
 class BimodalQATLinear(nn.Module):
     """
-    Custom 3D attention linear projection layer implementing bimodal integration 
-    transforms and Quantization-Aware Training (QAT) to optimize edge deployment stability.
+    Upgraded Multi-Stage Deep 3D Feature Projection Block.
+    Implements non-linear layers and batch normalization to eliminate underfitting.
     """
     def __init__(self, in_features, out_features, bit_width=8):
         super().__init__()
         self.bit_width = bit_width
-        self.linear = nn.Linear(in_features, out_features)
         
-        # Configure strict fixed-point quantization limits (signed 8-bit range)
+        # Multi-stage projection network to extract complex spatial patterns
+        self.feature_block = nn.Sequential(
+            nn.Linear(in_features, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Linear(64, out_features)
+        )
+        
         self.qmin = -(2 ** (bit_width - 1))
         self.qmax = (2 ** (bit_width - 1)) - 1
-        
-        # Learned channel-wise sign-shifting vector to align split post-Key activations
         self.register_buffer("bimodal_shift_vector", torch.randn(1, out_features) * 2.5)
 
     def compute_fake_quantization(self, input_tensor):
-        """
-        Clamps and rounds floating-point arrays to simulate hardware quantization limits,
-        maintaining straight-through gradient tracing paths for backpropagation.
-        """
         max_val = torch.max(torch.abs(input_tensor))
         if max_val == 0:
             return input_tensor
@@ -33,18 +36,19 @@ class BimodalQATLinear(nn.Module):
         return fake_quantized_tensor
 
     def forward(self, feature_embeddings):
-        """
-        Executes forward matrix multiplication with activation smoothing and QAT operators.
-        """
-        raw_projection = self.linear(feature_embeddings)
+        # Reshape point matrices to apply 1D Batch Normalization layers
+        batch_size, points_count, features_dim = feature_embeddings.shape
+        flat_features = feature_embeddings.view(-1, features_dim)
+        
+        # Pass elements through the deep non-linear block
+        flat_projections = self.feature_block(flat_features)
+        raw_projection = flat_projections.view(batch_size, points_count, -1)
+        
         smoothed_projection = raw_projection - self.bimodal_shift_vector
         qat_activations = self.compute_fake_quantization(smoothed_projection)
         return qat_activations
 
 class VolumetricCoherenceLoss(nn.Module):
-    """
-    Custom loss module tracking structural variance regressions over 3D boundaries.
-    """
     def __init__(self):
         super().__init__()
         self.mse = nn.MSELoss()
