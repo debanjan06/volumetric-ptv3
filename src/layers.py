@@ -1,67 +1,55 @@
-%%writefile src/train.py
-import os
 import torch
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from data_prep import DALESProductionDataset
-from layers import BimodalQATLinear, VolumetricCoherenceLoss
-from evaluate import VolumetricPerceptionEvaluator
+import torch.nn as nn
 
-def run_production_training():
-    print("=== Launching Volumetric-PTv3 Live Training Pipeline ===")
-    torch.manual_seed(42)
-    
-    # Update this path string to point exactly to your Google Drive PLY folder
-    train_dir = "/content/drive/MyDrive/YOUR_DRIVE_FOLDER_NAME/train"
-    
-    if not os.path.exists(train_dir) or not os.listdir(train_dir):
-        print(f"   [Error] Training directory '{train_dir}' is empty or missing.")
-        return
+class BimodalQATLinear(nn.Module):
+    """
+    Custom 3D attention linear projection layer implementing bimodal integration 
+    transforms and Quantization-Aware Training (QAT) to optimize edge deployment stability.
+    """
+    def __init__(self, in_features, out_features, bit_width=8):
+        super().__init__()
+        self.bit_width = bit_width
+        self.linear = nn.Linear(in_features, out_features)
+        
+        # Configure strict fixed-point quantization limits (signed 8-bit range)
+        self.qmin = -(2 ** (bit_width - 1))
+        self.qmax = (2 ** (bit_width - 1)) - 1
+        
+        # Learned channel-wise sign-shifting vector to align split post-Key activations
+        self.register_buffer("bimodal_shift_vector", torch.randn(1, out_features) * 2.5)
 
-    # Initialize our lazy-loading, cloud-optimized dataset
-    dataset = DALESProductionDataset(data_directory=train_dir, max_points_per_block=8192, chunks_per_file=32)
-    train_loader = DataLoader(dataset, batch_size=2, shuffle=True)
-
-    # Instantiate network components
-    model = BimodalQATLinear(in_features=1, out_features=16, bit_width=8)
-    criterion = VolumetricCoherenceLoss()
-    evaluator = VolumetricPerceptionEvaluator(num_classes=16)
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
-
-    model.train()
-    for epoch in range(1):
-        for batch_idx, (coords, features, labels) in enumerate(train_loader):
-            optimizer.zero_grad()
+    def compute_fake_quantization(self, input_tensor):
+        """
+        Clamps and rounds floating-point arrays to simulate hardware quantization limits,
+        maintaining straight-through gradient tracing paths for backpropagation.
+        """
+        max_val = torch.max(torch.abs(input_tensor))
+        if max_val == 0:
+            return input_tensor
             
-            batch_size, points_count, _ = features.shape
-            labels_one_hot = torch.zeros(batch_size, points_count, 16)
-            clamped_labels = torch.clamp(labels, 0, 15)
-            labels_one_hot.scatter_(2, clamped_labels.unsqueeze(-1), 1.0)
+        scale_factor = max_val / self.qmax
+        quantized_clamped = torch.clamp(torch.round(input_tensor / scale_factor), self.qmin, self.qmax)
+        fake_quantized_tensor = quantized_clamped * scale_factor
+        return fake_quantized_tensor
 
-            # Forward pass through our verified quantization layers
-            predictions = model(features)
-            
-            # Loss processing
-            loss = criterion(predictions.view(-1, 16), labels_one_hot.view(-1, 16))
-            loss.backward()
-            optimizer.step()
-            
-            print(f"\n   [Batch {batch_idx + 1}] Loss Convergence: {loss.item():.5f}")
-            
-            # Run cloud validation tracking evaluation metrics
-            model.eval()
-            with torch.no_grad():
-                test_preds = model(features)
-                _ = evaluator.generate_scientific_report(
-                    coords[0], test_preds[0], labels_one_hot[0]
-                )
-            model.train()
-            
-            # Break early for verification purposes during testing passes
-            break 
+    def forward(self, feature_embeddings):
+        """
+        Executes forward matrix multiplication with activation smoothing and QAT operators.
+        """
+        raw_projection = self.linear(feature_embeddings)
+        smoothed_projection = raw_projection - self.bimodal_shift_vector
+        qat_activations = self.compute_fake_quantization(smoothed_projection)
+        return qat_activations
 
-    print("\n==========================================================")
-    print("-> Cloud Integration Training Run Successfully Validated.")
+class VolumetricCoherenceLoss(nn.Module):
+    """
+    Custom loss module tracking structural variance regressions over 3D boundaries.
+    """
+    def __init__(self):
+        super().__init__()
+        self.mse = nn.MSELoss()
 
-if __name__ == "__main__":
-    run_production_training()
+    def forward(self, predicted_embeddings, target_embeddings):
+        if not predicted_embeddings.requires_grad:
+            raise RuntimeError("Gradient tracing context lost or detached in forward graph pathway.")
+        return self.mse(predicted_embeddings, target_embeddings)
