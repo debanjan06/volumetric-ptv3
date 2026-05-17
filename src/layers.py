@@ -3,14 +3,14 @@ import torch.nn as nn
 
 class BimodalQATLinear(nn.Module):
     """
-    Upgraded Multi-Stage Deep 3D Feature Projection Block.
-    Implements non-linear layers and batch normalization to eliminate underfitting.
+    Upgraded Probabilistic Deep 3D Feature Projection Block.
+    Integrates Softmax normalization to map raw logits into bounded class distributions.
     """
     def __init__(self, in_features, out_features, bit_width=8):
         super().__init__()
         self.bit_width = bit_width
         
-        # Multi-stage projection network to extract complex spatial patterns
+        # Added nn.Softmax(dim=-1) to output well-behaved probabilities matching MSE bounds
         self.feature_block = nn.Sequential(
             nn.Linear(in_features, 64),
             nn.BatchNorm1d(64),
@@ -18,7 +18,8 @@ class BimodalQATLinear(nn.Module):
             nn.Linear(64, 64),
             nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Linear(64, out_features)
+            nn.Linear(64, out_features),
+            nn.Softmax(dim=-1)
         )
         
         self.qmin = -(2 ** (bit_width - 1))
@@ -36,11 +37,9 @@ class BimodalQATLinear(nn.Module):
         return fake_quantized_tensor
 
     def forward(self, feature_embeddings):
-        # Reshape point matrices to apply 1D Batch Normalization layers
         batch_size, points_count, features_dim = feature_embeddings.shape
         flat_features = feature_embeddings.view(-1, features_dim)
         
-        # Pass elements through the deep non-linear block
         flat_projections = self.feature_block(flat_features)
         raw_projection = flat_projections.view(batch_size, points_count, -1)
         
@@ -56,4 +55,4 @@ class VolumetricCoherenceLoss(nn.Module):
     def forward(self, predicted_embeddings, target_embeddings):
         if not predicted_embeddings.requires_grad:
             raise RuntimeError("Gradient tracing context lost or detached in forward graph pathway.")
-        return self.mse(predicted_embeddings, target_embeddings)
+        return self.mse(predicted_embeddings, target_embeddings) 
