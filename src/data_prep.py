@@ -73,17 +73,26 @@ class DALESProductionDataset(Dataset):
             
         xyz = np.stack([block_data['x'], block_data['y'], block_data['z']], axis=1)
         
-        # FIX: Normalize raw 16-bit sensor intensity metrics cleanly between 0.0 and 1.0
+        # 1. Normalize relative 3D spatial positions to stay bounded within a 0.0 - 1.0 bounding matrix
+        xyz_min = np.min(xyz, axis=0)
+        xyz_max = np.max(xyz, axis=0)
+        # Add epsilon denominator floor to prevent divisions by zero on flat layers
+        xyz_scaled = (xyz - xyz_min) / (xyz_max - xyz_min + 1e-6)
+        
+        # 2. Normalize raw 16-bit sensor intensity metrics cleanly between 0.0 and 1.0
         raw_intensity = block_data['intensity'].astype(np.float32)
         normalized_intensity = raw_intensity / 65535.0
         intensity_features = normalized_intensity.reshape(-1, 1)
+        
+        # 3. Form a 4D spatial feature tensor array [X_scaled, Y_scaled, Z_scaled, Intensity_normalized]
+        combined_4d_features = np.concatenate([xyz_scaled, intensity_features], axis=-1)
         
         labels = block_data['sem_class'].astype(np.int64)
 
         sorting_order = self.serializer.serialize_point_stream(xyz)
         
         coords_sorted = torch.tensor(xyz[sorting_order], dtype=torch.float32)
-        features_sorted = torch.tensor(intensity_features[sorting_order], dtype=torch.float32)
+        features_sorted = torch.tensor(combined_4d_features[sorting_order], dtype=torch.float32)
         labels_sorted = torch.tensor(labels[sorting_order], dtype=torch.long)
 
         return coords_sorted, features_sorted, labels_sorted
