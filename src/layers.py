@@ -3,14 +3,14 @@ import torch.nn as nn
 
 class BimodalQATLinear(nn.Module):
     """
-    Upgraded Probabilistic Deep 3D Feature Projection Block.
-    Integrates Softmax normalization to map raw logits into bounded class distributions.
+    Production-optimized QAT Multi-Stage Feature Projection Module.
+    Outputs raw logits to integrate seamlessly with Cross-Entropy Loss channels.
     """
     def __init__(self, in_features, out_features, bit_width=8):
         super().__init__()
         self.bit_width = bit_width
         
-        # Added nn.Softmax(dim=-1) to output well-behaved probabilities matching MSE bounds
+        # Core non-linear representation block outputting unconstrained logits
         self.feature_block = nn.Sequential(
             nn.Linear(in_features, 64),
             nn.BatchNorm1d(64),
@@ -18,8 +18,7 @@ class BimodalQATLinear(nn.Module):
             nn.Linear(64, 64),
             nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Linear(64, out_features),
-            nn.Softmax(dim=-1)
+            nn.Linear(64, out_features)
         )
         
         self.qmin = -(2 ** (bit_width - 1))
@@ -46,13 +45,3 @@ class BimodalQATLinear(nn.Module):
         smoothed_projection = raw_projection - self.bimodal_shift_vector
         qat_activations = self.compute_fake_quantization(smoothed_projection)
         return qat_activations
-
-class VolumetricCoherenceLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.mse = nn.MSELoss()
-
-    def forward(self, predicted_embeddings, target_embeddings):
-        if not predicted_embeddings.requires_grad:
-            raise RuntimeError("Gradient tracing context lost or detached in forward graph pathway.")
-        return self.mse(predicted_embeddings, target_embeddings) 
