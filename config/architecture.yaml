@@ -1,1 +1,16 @@
- 
+# =========================================================================
+# Volumetric-PTv3 Configuration Parameters
+# =========================================================================
+
+dataset:
+  name: "DALES_Aerial_LiDAR"
+  quantization_scale: 10.0       # Maps continuous coordinates to 10cm voxel grids
+  intensity_feature_dim: 1       # Standard single-channel reflectance intensity
+
+model_precision:
+  bit_width: 8                   # Targets INT8 quantization for edge processors
+  embedding_dim: 16              # Dimensionality of the panoptic tracking projection
+
+optimizer:
+  learning_rate: 0.01
+  algorithm: "Adam" 
