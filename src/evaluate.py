@@ -77,7 +77,7 @@ class DALESCrossValidator:
 
 if __name__ == "__main__":
     # Test path variables matching your Google Drive mounting schema
-    test_dir = "/content/drive/MyDrive/YOUR_DRIVE_FOLDER_NAME/test"
+    test_dir = "/content/drive/My Drive/DALES_Processed/test"
     saved_weights = "models/volumetric_ptv3_qat_8bit.pth"
     
     # Standard dummy parameters to trigger fallback verification loops if local execution is handled
