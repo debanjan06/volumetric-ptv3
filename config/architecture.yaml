@@ -5,7 +5,8 @@
 dataset:
   name: "DALES_Aerial_LiDAR"
   quantization_scale: 10.0       # Maps continuous coordinates to 10cm voxel grids
-  intensity_feature_dim: 1       # Standard single-channel reflectance intensity
+  intensity_feature_dim: 1       # Single-channel reflectance intensity
+  num_classes: 16                # Target semantic categories matrix bounds
 
 model_precision:
   bit_width: 8                   # Targets INT8 quantization for edge processors
@@ -13,4 +14,4 @@ model_precision:
 
 optimizer:
   learning_rate: 0.01
-  algorithm: "Adam" 
+  algorithm: "Adam"
