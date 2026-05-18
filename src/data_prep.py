@@ -33,13 +33,13 @@ class DALESProductionDataset(Dataset):
         self.max_points_per_block = max_points_per_block
         self.chunks_per_file = chunks_per_file
         
-        self.file_list = [os.path.join(data_directory, f) for f in os.listdir(data_directory) if f.endswith('.ply')]
+        # Track pre-voxelized tensor files (.pt)
+        self.file_list = [os.path.join(data_directory, f) for f in os.listdir(data_directory) if f.endswith('.pt')]
         if not self.file_list:
-            raise RuntimeError(f"No valid .ply target files discovered inside '{data_directory}'")
+            raise RuntimeError(f"No valid pre-processed tensor packages discovered inside '{data_directory}'")
             
-        self.class_counts = np.zeros(16, dtype=np.int64)
         print(f"\n=== Initialized Scaled Lazy Spatial Data Lake ===")
-        print(f"   -> Tracked Files on Disk: {len(self.file_list)}")
+        print(f"   -> Tracked Pre-Voxelized Assets: {len(self.file_list)}")
 
     def __len__(self):
         return len(self.file_list) * self.chunks_per_file
@@ -48,55 +48,29 @@ class DALESProductionDataset(Dataset):
         file_idx = idx // self.chunks_per_file
         file_path = self.file_list[file_idx]
         
-        header_offset = 0
-        with open(file_path, 'rb') as f:
-            for line in f:
-                header_offset += len(line)
-                if line.decode('ascii', errors='ignore').strip() == "end_header":
-                    break
+        # Instantly load pre-computed tensor matrices without CPU bottlenecks
+        payload = torch.load(file_path)
+        xyz_all = payload['xyz']
+        intensity_all = payload['intensity']
+        labels_all = payload['labels']
         
-        ply_dt = np.dtype([
-            ('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
-            ('intensity', 'i4'), ('sem_class', 'i4'), ('ins_class', 'i4')
-        ])
+        total_points = len(labels_all)
         
-        raw_data = np.fromfile(file_path, dtype=ply_dt, offset=header_offset)
-        
-        # Extract initial spatial coordinates
-        xyz_raw = np.stack([raw_data['x'], raw_data['y'], raw_data['z']], axis=1)
-        
-        # FIX: Apply a fast 3D Grid Voxel Downsampling step (15cm resolution cubes)
-        voxel_size = 0.15
-        voxel_coords = np.floor(xyz_raw / voxel_size).astype(np.int32)
-        _, unique_indices = np.unique(voxel_coords, axis=0, return_index=True)
-        filtered_data = raw_data[unique_indices]
-        
-        total_points = len(filtered_data)
-        
-        # Enforce static block-size constraints over the voxelized data subset
         if total_points > self.max_points_per_block:
             sampling_indices = np.random.choice(total_points, self.max_points_per_block, replace=False)
-            block_data = filtered_data[sampling_indices]
         else:
             sampling_indices = np.random.choice(total_points, self.max_points_per_block, replace=True)
-            block_data = filtered_data[sampling_indices]
             
-        xyz = np.stack([block_data['x'], block_data['y'], block_data['z']], axis=1)
+        xyz = xyz_all[sampling_indices]
+        intensity_features = intensity_all[sampling_indices]
+        labels = labels_all[sampling_indices]
         
-        # Normalize positions inside the voxelized block bounding box
+        # Calculate bounding dimensions inside the block
         xyz_min = np.min(xyz, axis=0)
         xyz_max = np.max(xyz, axis=0)
         xyz_scaled = (xyz - xyz_min) / (xyz_max - xyz_min + 1e-6)
         
-        # Normalize raw sensor intensity metrics
-        raw_intensity = block_data['intensity'].astype(np.float32)
-        normalized_intensity = raw_intensity / 65535.0
-        intensity_features = normalized_intensity.reshape(-1, 1)
-        
-        # Form the 4D spatial feature tensor [X_scaled, Y_scaled, Z_scaled, Intensity_normalized]
         combined_4d_features = np.concatenate([xyz_scaled, intensity_features], axis=-1)
-        labels = block_data['sem_class'].astype(np.int64)
-
         sorting_order = self.serializer.serialize_point_stream(xyz)
         
         coords_sorted = torch.tensor(xyz[sorting_order], dtype=torch.float32)

@@ -59,7 +59,7 @@ class DALESCrossValidator:
         return generalized_miou
 
 if __name__ == "__main__":
-    test_dir = "/content/drive/My Drive/DALES_Processed/test"
+    test_dir = "/content/drive/My Drive/DALES_Processed/test_voxelized"
     saved_weights = "models/volumetric_ptv3_qat_8bit.pth"
     
     validator = DALESCrossValidator(num_classes=16)

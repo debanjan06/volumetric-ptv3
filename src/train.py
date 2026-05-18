@@ -11,8 +11,8 @@ def run_production_training():
     print("=== Launching Volumetric-PTv3 Live Training Pipeline ===")
     torch.manual_seed(42)
     
-    train_dir = "/content/drive/My Drive/DALES_Processed/train"
-    test_dir = "/content/drive/My Drive/DALES_Processed/test"
+    train_dir = "/content/drive/My Drive/DALES_Processed/train_voxelized"
+    test_dir = "/content/drive/My Drive/DALES_Processed/test_voxelized"
     
     if not os.path.exists(train_dir) or not os.listdir(train_dir):
         print(f"   [Error] Training directory '{train_dir}' is empty or missing.")
