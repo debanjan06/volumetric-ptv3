@@ -37,7 +37,6 @@ class DALESProductionDataset(Dataset):
         if not self.file_list:
             raise RuntimeError(f"No valid .ply target files discovered inside '{data_directory}'")
             
-        # Target placeholder to store global class frequencies for class balancing
         self.class_counts = np.zeros(16, dtype=np.int64)
         print(f"\n=== Initialized Scaled Lazy Spatial Data Lake ===")
         print(f"   -> Tracked Files on Disk: {len(self.file_list)}")
@@ -62,31 +61,40 @@ class DALESProductionDataset(Dataset):
         ])
         
         raw_data = np.fromfile(file_path, dtype=ply_dt, offset=header_offset)
-        total_points = len(raw_data)
         
+        # Extract initial spatial coordinates
+        xyz_raw = np.stack([raw_data['x'], raw_data['y'], raw_data['z']], axis=1)
+        
+        # FIX: Apply a fast 3D Grid Voxel Downsampling step (15cm resolution cubes)
+        voxel_size = 0.15
+        voxel_coords = np.floor(xyz_raw / voxel_size).astype(np.int32)
+        _, unique_indices = np.unique(voxel_coords, axis=0, return_index=True)
+        filtered_data = raw_data[unique_indices]
+        
+        total_points = len(filtered_data)
+        
+        # Enforce static block-size constraints over the voxelized data subset
         if total_points > self.max_points_per_block:
             sampling_indices = np.random.choice(total_points, self.max_points_per_block, replace=False)
-            block_data = raw_data[sampling_indices]
+            block_data = filtered_data[sampling_indices]
         else:
             sampling_indices = np.random.choice(total_points, self.max_points_per_block, replace=True)
-            block_data = raw_data[sampling_indices]
+            block_data = filtered_data[sampling_indices]
             
         xyz = np.stack([block_data['x'], block_data['y'], block_data['z']], axis=1)
         
-        # 1. Normalize relative 3D spatial positions to stay bounded within a 0.0 - 1.0 bounding matrix
+        # Normalize positions inside the voxelized block bounding box
         xyz_min = np.min(xyz, axis=0)
         xyz_max = np.max(xyz, axis=0)
-        # Add epsilon denominator floor to prevent divisions by zero on flat layers
         xyz_scaled = (xyz - xyz_min) / (xyz_max - xyz_min + 1e-6)
         
-        # 2. Normalize raw 16-bit sensor intensity metrics cleanly between 0.0 and 1.0
+        # Normalize raw sensor intensity metrics
         raw_intensity = block_data['intensity'].astype(np.float32)
         normalized_intensity = raw_intensity / 65535.0
         intensity_features = normalized_intensity.reshape(-1, 1)
         
-        # 3. Form a 4D spatial feature tensor array [X_scaled, Y_scaled, Z_scaled, Intensity_normalized]
+        # Form the 4D spatial feature tensor [X_scaled, Y_scaled, Z_scaled, Intensity_normalized]
         combined_4d_features = np.concatenate([xyz_scaled, intensity_features], axis=-1)
-        
         labels = block_data['sem_class'].astype(np.int64)
 
         sorting_order = self.serializer.serialize_point_stream(xyz)
