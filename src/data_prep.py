@@ -3,6 +3,13 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+# FIX: Allowlist NumPy reconstruction globals for secure PyTorch 2.6+ loading
+torch.serialization.add_safe_globals([
+    np._core.multiarray._reconstruct,
+    np.ndarray,
+    np.dtype
+])
+
 class DALESCoordinateSerializer:
     def __init__(self, quantization_scale=10.0):
         self.scale = quantization_scale
