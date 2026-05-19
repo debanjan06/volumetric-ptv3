@@ -3,13 +3,6 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-# FIX: Allowlist NumPy reconstruction globals for secure PyTorch 2.6+ loading
-torch.serialization.add_safe_globals([
-    np._core.multiarray._reconstruct,
-    np.ndarray,
-    np.dtype
-])
-
 class DALESCoordinateSerializer:
     def __init__(self, quantization_scale=10.0):
         self.scale = quantization_scale
@@ -54,8 +47,8 @@ class DALESProductionDataset(Dataset):
         file_idx = idx // self.chunks_per_file
         file_path = self.file_list[file_idx]
         
-        # OPTIMIZATION: Load weights with map_location='cpu' to prevent memory spikes
-        payload = torch.load(file_path, map_location='cpu')
+        # FIX: Explicitly set weights_only=False to allow complex NumPy data structures to load safely
+        payload = torch.load(file_path, map_location='cpu', weights_only=False)
         
         xyz_all = payload['xyz']
         intensity_all = payload['intensity']
@@ -63,18 +56,15 @@ class DALESProductionDataset(Dataset):
         
         total_points = len(labels_all)
         
-        # Compute random slices rather than copying massive arrays in memory
         if total_points > self.max_points_per_block:
             sampling_indices = np.random.choice(total_points, self.max_points_per_block, replace=False)
         else:
             sampling_indices = np.random.choice(total_points, self.max_points_per_block, replace=True)
             
-        # Extract the precise 8192 point subset needed for the active batch
         xyz = xyz_all[sampling_indices]
         intensity_features = intensity_all[sampling_indices]
         labels = labels_all[sampling_indices]
         
-        # Clear references immediately to free up RAM overhead
         del payload
         
         xyz_min = np.min(xyz, axis=0)
