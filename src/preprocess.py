@@ -5,7 +5,7 @@ import torch
 def run_offline_voxelization():
     print("=== Launching High-Velocity Vectorized Preprocessing Pipeline ===")
     
-    drive_base = r"C:\Users\DEBANJAN SHIL\Documents\volumetric-ptv3\data"
+    drive_base = "/content/drive/My Drive/DALES_Processed"
     partitions = ["train", "test"]
     voxel_size = 0.15  # 15cm grid downsampling bounds
     
