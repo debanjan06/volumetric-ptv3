@@ -3,6 +3,29 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+class DALESCoordinateSerializer:
+    def __init__(self, quantization_scale=10.0):
+        self.scale = quantization_scale
+
+    def compute_morton_3d_index(self, quantized_xyz):
+        x = quantized_xyz[:, 0]
+        y = quantized_xyz[:, 1]
+        z = quantized_xyz[:, 2]
+        
+        morton_index = 0
+        for i in range(10):
+            morton_index |= ((x & (1 << i)) << (2 * i)) | \
+                           ((y & (1 << i)) << (2 * i + 1)) | \
+                           ((z & (1 << i)) << (2 * i + 2))
+        return morton_index
+
+    def serialize_point_stream(self, xyz):
+        min_bounds = np.min(xyz, axis=0)
+        quantized_xyz = np.floor((xyz - min_bounds) * self.scale).astype(np.int64)
+        spatial_keys = self.compute_morton_3d_index(quantized_xyz)
+        return np.argsort(spatial_keys)
+
+
 class DALESProductionDataset(Dataset):
     def __init__(self, data_directory, quantization_scale=10.0, max_points_per_block=8192, chunks_per_file=32):
         self.data_dir = data_directory
@@ -15,6 +38,7 @@ class DALESProductionDataset(Dataset):
             raise RuntimeError(f"No valid pre-processed tensor packages discovered inside '{data_directory}'")
             
         print(f"\n=== Initialized 7D Context-Aware Data Lake ===")
+        print(f"   -> Tracked Pre-Voxelized Assets: {len(self.file_list)}")
 
     def __len__(self):
         return len(self.file_list) * self.chunks_per_file
