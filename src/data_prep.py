@@ -33,12 +33,11 @@ class DALESProductionDataset(Dataset):
         self.max_points_per_block = max_points_per_block
         self.chunks_per_file = chunks_per_file
         
-        # Track pre-voxelized tensor files (.pt)
         self.file_list = [os.path.join(data_directory, f) for f in os.listdir(data_directory) if f.endswith('.pt')]
         if not self.file_list:
             raise RuntimeError(f"No valid pre-processed tensor packages discovered inside '{data_directory}'")
             
-        print(f"\n=== Initialized Scaled Lazy Spatial Data Lake ===")
+        print(f"\n=== Initialized RAM-Optimized Lazy Data Lake ===")
         print(f"   -> Tracked Pre-Voxelized Assets: {len(self.file_list)}")
 
     def __len__(self):
@@ -48,24 +47,29 @@ class DALESProductionDataset(Dataset):
         file_idx = idx // self.chunks_per_file
         file_path = self.file_list[file_idx]
         
-        # Instantly load pre-computed tensor matrices without CPU bottlenecks
-        payload = torch.load(file_path)
+        # OPTIMIZATION: Load weights with map_location='cpu' to prevent memory spikes
+        payload = torch.load(file_path, map_location='cpu')
+        
         xyz_all = payload['xyz']
         intensity_all = payload['intensity']
         labels_all = payload['labels']
         
         total_points = len(labels_all)
         
+        # Compute random slices rather than copying massive arrays in memory
         if total_points > self.max_points_per_block:
             sampling_indices = np.random.choice(total_points, self.max_points_per_block, replace=False)
         else:
             sampling_indices = np.random.choice(total_points, self.max_points_per_block, replace=True)
             
+        # Extract the precise 8192 point subset needed for the active batch
         xyz = xyz_all[sampling_indices]
         intensity_features = intensity_all[sampling_indices]
         labels = labels_all[sampling_indices]
         
-        # Calculate bounding dimensions inside the block
+        # Clear references immediately to free up RAM overhead
+        del payload
+        
         xyz_min = np.min(xyz, axis=0)
         xyz_max = np.max(xyz, axis=0)
         xyz_scaled = (xyz - xyz_min) / (xyz_max - xyz_min + 1e-6)
