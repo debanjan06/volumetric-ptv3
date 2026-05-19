@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 def run_offline_voxelization():
-    print("=== Launching Context-Aware Preprocessing Pipeline ===")
+    print("=== Launching High-Velocity Vectorized Preprocessing Pipeline ===")
     
     drive_base = r"C:\Users\DEBANJAN SHIL\Documents\volumetric-ptv3\data"
     partitions = ["train", "test"]
@@ -20,7 +20,6 @@ def run_offline_voxelization():
         os.makedirs(dest_dir, exist_ok=True)
         
         if not os.path.exists(src_dir):
-            print(f"   [Warning] Partition path '{src_dir}' missing. Bypassing.")
             continue
             
         file_list = [f for f in os.listdir(src_dir) if f.endswith('.ply')]
@@ -40,40 +39,51 @@ def run_offline_voxelization():
             raw_data = np.fromfile(src_path, dtype=ply_dt, offset=header_offset)
             xyz_raw = np.stack([raw_data['x'], raw_data['y'], raw_data['z']], axis=1)
             
-            # --- FEATURE ENGINEERING: SPATIAL CONTEXT EXTRACTION ---
-            # 1. Compute Macro-Scale Local Density Map (2 meter 2D grids)
+            # --- 1. VECTORIZED MACRO-SCALE DENSITY (2.0m Grids) ---
             macro_grid_size = 2.0
             macro_coords = np.floor(xyz_raw[:, :2] / macro_grid_size).astype(np.int32)
             macro_keys = macro_coords[:, 0] * 73856093 ^ macro_coords[:, 1] * 19349663
-            unique_keys, counts = np.unique(macro_keys, return_counts=True)
-            key_to_count = dict(zip(unique_keys, counts))
-            raw_densities = np.array([key_to_count[k] for k in macro_keys], dtype=np.float32)
+            
+            _, inverse_macro, counts_macro = np.unique(macro_keys, return_inverse=True, return_counts=True)
+            raw_densities = counts_macro[inverse_macro].astype(np.float32)
             normalized_densities = (raw_densities - raw_densities.min()) / (raw_densities.max() - raw_densities.min() + 1e-6)
             
-            # 2. Compute Micro-Scale Relative Elevation & Height Variance (1 meter 2D grids)
+            # --- 2. VECTORIZED MICRO-SCALE RELATIVE HEIGHT & VARIANCE (1.0m Grids) ---
             micro_grid_size = 1.0
             micro_coords = np.floor(xyz_raw[:, :2] / micro_grid_size).astype(np.int32)
             micro_keys = micro_coords[:, 0] * 73856093 ^ micro_coords[:, 1] * 19349663
             
-            # Find minimum and variance mapping profiles per spatial column
-            unique_micro_keys = np.unique(micro_keys)
-            min_z_map = {}
-            var_z_map = {}
+            # Sort all points by their micro spatial key to align matching columns
+            sort_idx = np.argsort(micro_keys)
+            sorted_keys = micro_keys[sort_idx]
+            sorted_z = xyz_raw[sort_idx, 2]
             
-            for k in unique_micro_keys:
-                mask = (micro_keys == k)
-                z_values = xyz_raw[mask, 2]
-                min_z_map[k] = z_values.min()
-                var_z_map[k] = z_values.var() if len(z_values) > 1 else 0.0
-                
-            relative_heights = np.array([xyz_raw[i, 2] - min_z_map[micro_keys[i]] for i in range(len(xyz_raw))], dtype=np.float32)
-            height_variances = np.array([var_z_map[micro_keys[i]] for i in range(len(micro_keys))], dtype=np.float32)
+            # Locate entry/exit index points for each unique grid column boundary
+            split_idx = np.where(sorted_keys[:-1] != sorted_keys[1:])[0] + 1
             
-            # Normalize calculated geometric descriptors
+            # Execute simultaneous chunk reductions using NumPy ufunc operators
+            min_z_per_column = np.minimum.reduceat(sorted_z, np.insert(split_idx, 0, 0))
+            
+            # Re-map minimum metrics back to original un-sorted array indices
+            _, inverse_micro = np.unique(micro_keys, return_inverse=True)
+            point_min_z = min_z_per_column[inverse_micro]
+            relative_heights = xyz_raw[:, 2] - point_min_z
             norm_rel_height = (relative_heights - relative_heights.min()) / (relative_heights.max() - relative_heights.min() + 1e-6)
-            norm_height_var = (height_variances - height_variances.min()) / (height_variances.max() - height_variances.min() + 1e-6)
             
-            # --- APPLY 15CM GRID VOXEL FILTER ---
+            # Calculate height variance cleanly by avoiding loops
+            sum_z = np.add.reduceat(sorted_z, np.insert(split_idx, 0, 0))
+            sum_z_sq = np.add.reduceat(sorted_z**2, np.insert(split_idx, 0, 0))
+            counts_micro = np.diff(np.append(np.insert(split_idx, 0, 0), len(sorted_z)))
+            
+            # Mean and variance calculations
+            mean_z = sum_z / counts_micro
+            var_z = (sum_z_sq / counts_micro) - (mean_z**2)
+            var_z = np.clip(var_z, 0.0, None)  # Safeguard numerical floats from dipping below 0
+            
+            point_var_z = var_z[inverse_micro]
+            norm_height_var = (point_var_z - point_var_z.min()) / (point_var_z.max() - point_var_z.min() + 1e-6)
+            
+            # --- 3. APPLY 15CM GRID VOXEL FILTER ---
             voxel_coords = np.floor(xyz_raw / voxel_size).astype(np.int32)
             _, unique_indices = np.unique(voxel_coords, axis=0, return_index=True)
             
@@ -82,13 +92,10 @@ def run_offline_voxelization():
             intensity = (filtered_data['intensity'].astype(np.float32) / 65535.0).reshape(-1, 1)
             labels = filtered_data['sem_class'].astype(np.int64)
             
-            # Filter corresponding engineered context attributes to preserve indices
             f_rel_height = norm_rel_height[unique_indices].reshape(-1, 1)
             f_height_var = norm_height_var[unique_indices].reshape(-1, 1)
             f_density = normalized_densities[unique_indices].reshape(-1, 1)
             
-            # 3. Compile the 7D Contextual Feature Bundle
-            # Shape: [Points, 7] -> [X, Y, Z, Intensity, Rel_Height, Height_Var, Density]
             context_features = np.concatenate([f_rel_height, f_height_var, f_density], axis=-1)
             
             torch.save({
