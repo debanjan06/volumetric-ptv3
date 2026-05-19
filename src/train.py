@@ -21,7 +21,7 @@ def run_production_training():
     dataset = DALESProductionDataset(data_directory=train_dir, max_points_per_block=8192, chunks_per_file=32)
     train_loader = DataLoader(dataset, batch_size=2, shuffle=True)
 
-    model = BimodalQATLinear(in_features=4, out_features=16, bit_width=8)
+    model = BimodalQATLinear(in_features=7, out_features=16, bit_width=8)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)

@@ -20,7 +20,7 @@ class DALESCrossValidator:
         test_loader = torch.utils.data.DataLoader(dataset, batch_size=2, shuffle=False)
 
         # FIX: Update input feature capacity to 4D to match the active training tensors
-        model = BimodalQATLinear(in_features=4, out_features=self.num_classes, bit_width=8)
+        model = BimodalQATLinear(in_features=7, out_features=self.num_classes, bit_width=8)
         
         print(f"   -> Loading network weights from: {weight_path}")
         checkpoint = torch.load(weight_path, map_location="cpu")
