@@ -8,3 +8,16 @@ data/
 *.bin
 *.h5
 *.pcd
+
+# PyTorch Checkpoint and Weight Artifacts
+models/
+*.pth
+*.pt
+
+# Local Runtime Compilation Directories
+dist/
+demo/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
