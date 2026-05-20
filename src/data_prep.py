@@ -2,6 +2,7 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from scipy.spatial import cKDTree
 
 class DALESCoordinateSerializer:
     def __init__(self, quantization_scale=10.0):
@@ -37,8 +38,7 @@ class DALESProductionDataset(Dataset):
         if not self.file_list:
             raise RuntimeError(f"No valid pre-processed tensor packages discovered inside '{data_directory}'")
             
-        print(f"\n=== Initialized 7D Context-Aware Data Lake ===")
-        print(f"   -> Tracked Pre-Voxelized Assets: {len(self.file_list)}")
+        print(f"\n=== Initialized 14D Neighborhood Spatial Data Lake ===")
 
     def __len__(self):
         return len(self.file_list) * self.chunks_per_file
@@ -69,12 +69,28 @@ class DALESProductionDataset(Dataset):
         xyz_max = np.max(xyz, axis=0)
         xyz_scaled = (xyz - xyz_min) / (xyz_max - xyz_min + 1e-6)
         
-        # Concat: [X_scaled, Y_scaled, Z_scaled, Intensity, Rel_Height, Height_Var, Density]
-        combined_7d_features = np.concatenate([xyz_scaled, intensity_features, context_features], axis=-1)
+        # Compile base 7D feature array
+        base_7d_features = np.concatenate([xyz_scaled, intensity_features, context_features], axis=-1)
+        
+        # --- FEATURE ENGINEERING: LOCAL NEIGHBORHOOD AGGREGATION ---
+        # Build an optimized spatial tree over the 8192 sampled point block
+        tree = cKDTree(xyz)
+        
+        # Query the 8 nearest neighbors for every single point (including itself)
+        _, neighbor_indices = tree.query(xyz, k=8)
+        
+        # Compute the mean feature values across the spatial neighborhoods
+        # Shape: [8192, 8, 7] -> Mean over axis 1 -> [8192, 7]
+        neighbor_features = base_7d_features[neighbor_indices]
+        mean_neighbor_features = np.mean(neighbor_features, axis=1)
+        
+        # Concatenate base features with neighbor features to form the 14D representation
+        combined_14d_features = np.concatenate([base_7d_features, mean_neighbor_features], axis=-1)
+        
         sorting_order = self.serializer.serialize_point_stream(xyz)
         
         coords_sorted = torch.tensor(xyz[sorting_order], dtype=torch.float32)
-        features_sorted = torch.tensor(combined_7d_features[sorting_order], dtype=torch.float32)
+        features_sorted = torch.tensor(combined_14d_features[sorting_order], dtype=torch.float32)
         labels_sorted = torch.tensor(labels[sorting_order], dtype=torch.long)
 
         return coords_sorted, features_sorted, labels_sorted
