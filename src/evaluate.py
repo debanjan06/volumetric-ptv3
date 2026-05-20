@@ -67,7 +67,6 @@ class DALESCrossValidator:
         print(f"   -> Tracked Pre-Voxelized Assets: {len(dataset.file_list)}")
         print(f"   -> Loading network weights from: {weight_path}")
         
-        # Upgraded to match the 14D input and 128-channel residual framework
         model = BimodalQATLinear(in_features=14, out_features=self.num_classes, bit_width=8)
         
         checkpoint = torch.load(weight_path, map_location='cpu', weights_only=False)
@@ -101,7 +100,6 @@ class DALESCrossValidator:
                     total_intersection[c] += intersection
                     total_union[c] += union
         
-        # Calculate mean Intersection over Union safely avoiding division by zero
         iou_per_class = []
         for c in range(self.num_classes):
             if total_union[c] == 0:
@@ -118,3 +116,17 @@ class DALESCrossValidator:
         print("==========================================================")
         
         return generalized_miou
+
+
+if __name__ == "__main__":
+    test_dir = "/content/drive/MyDrive/DALES_Processed/test_voxelized"
+    if not os.path.exists(test_dir):
+        test_dir = "/content/drive/My Drive/DALES_Processed/test_voxelized"
+        
+    weight_path = "models/volumetric_ptv3_qat_8bit.pth"
+    
+    if os.path.exists(weight_path):
+        validator = DALESCrossValidator(num_classes=16)
+        validator.execute_validation_pass(test_directory=test_dir, weight_path=weight_path)
+    else:
+        print(f"   [Error] Saved weight checkpoint not found at '{weight_path}'. Run training first.")
