@@ -3,9 +3,12 @@ import numpy as np
 import torch
 
 def run_offline_voxelization():
-    print("=== Launching High-Velocity Vectorized Preprocessing Pipeline ===")
+    print("=== Launching Globally Standardized Preprocessing Pipeline ===")
     
-    drive_base = "/content/drive/My Drive/DALES_Processed"
+    drive_base = "/content/drive/MyDrive/DALES_Processed"
+    if not os.path.exists(drive_base):
+        drive_base = "/content/drive/My Drive/DALES_Processed"
+        
     partitions = ["train", "test"]
     voxel_size = 0.15  # 15cm grid downsampling bounds
     
@@ -46,42 +49,42 @@ def run_offline_voxelization():
             
             _, inverse_macro, counts_macro = np.unique(macro_keys, return_inverse=True, return_counts=True)
             raw_densities = counts_macro[inverse_macro].astype(np.float32)
-            normalized_densities = (raw_densities - raw_densities.min()) / (raw_densities.max() - raw_densities.min() + 1e-6)
+            
+            # Global Scaling: Standardize using dataset-wide density approximations
+            norm_density = (raw_densities - 1500.0) / 800.0
             
             # --- 2. VECTORIZED MICRO-SCALE RELATIVE HEIGHT & VARIANCE (1.0m Grids) ---
             micro_grid_size = 1.0
             micro_coords = np.floor(xyz_raw[:, :2] / micro_grid_size).astype(np.int32)
             micro_keys = micro_coords[:, 0] * 73856093 ^ micro_coords[:, 1] * 19349663
             
-            # Sort all points by their micro spatial key to align matching columns
             sort_idx = np.argsort(micro_keys)
             sorted_keys = micro_keys[sort_idx]
             sorted_z = xyz_raw[sort_idx, 2]
             
-            # Locate entry/exit index points for each unique grid column boundary
             split_idx = np.where(sorted_keys[:-1] != sorted_keys[1:])[0] + 1
-            
-            # Execute simultaneous chunk reductions using NumPy ufunc operators
             min_z_per_column = np.minimum.reduceat(sorted_z, np.insert(split_idx, 0, 0))
             
-            # Re-map minimum metrics back to original un-sorted array indices
             _, inverse_micro = np.unique(micro_keys, return_inverse=True)
             point_min_z = min_z_per_column[inverse_micro]
             relative_heights = xyz_raw[:, 2] - point_min_z
-            norm_rel_height = (relative_heights - relative_heights.min()) / (relative_heights.max() - relative_heights.min() + 1e-6)
             
-            # Calculate height variance cleanly by avoiding loops
+            # Global Scaling: Robust Gaussian standardization for elevation
+            norm_rel_height = (relative_heights - 5.0) / 10.0
+            
+            # Calculate height variance cleanly
             sum_z = np.add.reduceat(sorted_z, np.insert(split_idx, 0, 0))
             sum_z_sq = np.add.reduceat(sorted_z**2, np.insert(split_idx, 0, 0))
             counts_micro = np.diff(np.append(np.insert(split_idx, 0, 0), len(sorted_z)))
             
-            # Mean and variance calculations
             mean_z = sum_z / counts_micro
             var_z = (sum_z_sq / counts_micro) - (mean_z**2)
-            var_z = np.clip(var_z, 0.0, None)  # Safeguard numerical floats from dipping below 0
+            var_z = np.clip(var_z, 0.0, None)
             
             point_var_z = var_z[inverse_micro]
-            norm_height_var = (point_var_z - point_var_z.min()) / (point_var_z.max() - point_var_z.min() + 1e-6)
+            
+            # Global Scaling: Log-transform to handle variance outliers, then normalize
+            norm_height_var = (np.log1p(point_var_z) - 0.5) / 1.2
             
             # --- 3. APPLY 15CM GRID VOXEL FILTER ---
             voxel_coords = np.floor(xyz_raw / voxel_size).astype(np.int32)
@@ -94,7 +97,7 @@ def run_offline_voxelization():
             
             f_rel_height = norm_rel_height[unique_indices].reshape(-1, 1)
             f_height_var = norm_height_var[unique_indices].reshape(-1, 1)
-            f_density = normalized_densities[unique_indices].reshape(-1, 1)
+            f_density = norm_density[unique_indices].reshape(-1, 1)
             
             context_features = np.concatenate([f_rel_height, f_height_var, f_density], axis=-1)
             
@@ -104,7 +107,7 @@ def run_offline_voxelization():
                 'context_features': context_features,
                 'labels': labels
             }, dest_path)
-            print(f"   [{idx+1}/{len(file_list)}] Voxelized & Context-Encoded: {file_name}")
+            print(f"   [{idx+1}/{len(file_list)}] Standardized & Voxelized: {file_name}")
 
 if __name__ == "__main__":
     run_offline_voxelization()
