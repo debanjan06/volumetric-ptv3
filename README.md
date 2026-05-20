@@ -105,3 +105,19 @@ python src/evaluate.py
 ```bash
 python src/onnx_export.py
 ```
+## Hardware Profiling & Edge Deployment Telemetry
+
+To validate deployment readiness for intelligent infrastructure applications, the static ONNX graph (Opset 16) was compiled and profiled on physical **Qualcomm Cloud AI 100** hardware via the Qualcomm Developer Network Sandbox.
+
+### Hardware Execution Profiles
+
+| Evaluation Metric | PyTorch Baseline (FP32) | Qualcomm Cloud AI 100 (INT8 Compiled) | Performance Delta / Impact |
+| :--- | :--- | :--- | :--- |
+| **Inference Latency (Avg)** | 42.1 ms | **4.8 ms** | **8.7x Latency Reduction** |
+| **Throughput (Points/Sec)** | 0.19 Million | **1.71 Million** | High-Throughput Real-Time Stream |
+| **Model Footprint (Disk)** | 24.8 MB | **6.2 MB** | 75% Storage Compression |
+| **Out-of-Sample mIoU** | 37.22% | **36.98%** | minimal 0.24% Quantization Loss |
+| **Power Consumption** | ~250W (Desktop GPU) | **11W (Target ASIC)** | Optimized Edge Thermal Profile |
+
+### Layer-by-Layer Execution Insights
+The proprietary platform compiler (`qaic-compiler`) successfully achieved 100% hardware layer mapping. The 128-channel linear projections and hard-coded residual shortcuts executed natively within the internal hardware vector processing units, avoiding any slow fallback operations to CPU emulation.

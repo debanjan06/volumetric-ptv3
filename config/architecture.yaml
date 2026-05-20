@@ -1,17 +1,15 @@
-# =========================================================================
-# Volumetric-PTv3 Configuration Parameters
-# =========================================================================
+# Your existing model configuration parameters (channels, layers, etc.)
+model:
+  input_channels: 14
+  hidden_channels: 128
+  num_classes: 16
 
-dataset:
-  name: "DALES_Aerial_LiDAR"
-  quantization_scale: 10.0       # Maps continuous coordinates to 10cm voxel grids
-  intensity_feature_dim: 1       # Single-channel reflectance intensity
-  num_classes: 16                # Target semantic categories matrix bounds
-
-model_precision:
-  bit_width: 8                   # Targets INT8 quantization for edge processors
-  embedding_dim: 16              # Dimensionality of the panoptic tracking projection
-
-optimizer:
-  learning_rate: 0.01
-  algorithm: "Adam"
+# Append these exact keys for the Qualcomm Cloud AI 100 pipeline
+hardware_compilation:
+  target_platform: "Qualcomm Cloud AI 100"
+  opset_version: 16
+  optimization_level: "O3"
+  static_shape:
+    batch_size: 1
+    point_count: 8192
+    feature_dimensions: 14
