@@ -158,4 +158,7 @@ To confirm the absolute performance impact of each structural addition, the netw
 The final trained weights, parameter blocks, and 8-bit simulation configurations for the 128-channel Deep Residual network iteration are hosted publicly on the HuggingFace Model Hub for immediate download, testing, and deployment integration.
 
 * **Repository Handle:** `debanjan06/volumetric-ptv3-qat-8bit`
-* **Asset Payload:** Fully tracked model weights checkpoint (`volumetric_ptv3_qat_8bit.pth`) and optimized compiled graph layer configurations.
+* **Asset Payload:** Fully tracked model weights checkpoint (`volumetric_ptv3_qat_8bit.pth`) and optimized compiled graph layer configurations. 
+### Compute Profile Metrics 
+- **Total Operational Runtime:** 15 Hours (Full training run + multi-stage spatial validation sweeps) 
+- **Optimization Overhead:** Includes active INT8 tensor range calibration constraints. 
