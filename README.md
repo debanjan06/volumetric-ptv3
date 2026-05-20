@@ -17,11 +17,14 @@ The pipeline features an automated scene reconstruction engine that ingests dens
 
 ## Technical Pipeline Optimization Matrix
 
+* **Total Dataset Volume:** ~11 GB raw airborne LiDAR data / 505+ Million spatial points (Dayton urban canopy scan)
+* **Evaluation Scale:** 2,883,584 dense point vectors across 11 out-of-sample test assets
+
 | Pipeline Iteration Stage | Target Architecture Parameters | Input Processing Vector Space | Realized Metric Performance | Deployment Readiness Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **Initial Baseline Run** | Shallow Linear (64 Channels) | File-Isolated Min-Max Scaling | 8.58% Out-of-Sample mIoU | Unstable / Failed Generalization |
 | **Architectural Leap** | Deep Residual (128 Channels) | Globally Standardized 14D Context ($k=8$) | **37.22% Out-of-Sample mIoU** | Converged (Weights Saved) |
-| **Production Target** | Static Compiled Graph | Fixed-Point Inference Engine | Model Footprint Optimized | **ONNX Export Complete (Opset 17)** |
+| **Production Target** | Static Compiled Graph | Fixed-Point Inference Engine | Model Footprint Optimized | **ONNX Export Complete (Opset 17)** |gine | Model Footprint Optimized | **ONNX Export Complete (Opset 17)** |
 
 ---
 
