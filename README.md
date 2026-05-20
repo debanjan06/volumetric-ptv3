@@ -6,7 +6,9 @@ This repository contains an end-to-end deep learning and model optimization pipe
 
 The pipeline features an automated scene reconstruction engine that ingests dense, out-of-sample validation blocks, streams low-latency inference, and stitches discrete coordinate tiles into a contiguous physical environment.
 
-![Stitched Urban Infrastructure Segmentation](demo/urban_scene.png)
+[![Click to Open Interactive 3D Canvas](demo/urban_scene.png)](https://htmlpreview.github.io/?https://github.com/debanjan06/volumetric-ptv3/blob/main/demo/final_complete_urban_scene.html)
+
+*Click the preview image above to launch the live, interactive 3D visualization canvas. Once the browser page opens, you can click and drag to rotate, pan, zoom, and turn the urban point cloud upside down directly in your browser window.*
 
 ### Semantic Label Classification Key
 * Ground and Asphalt Streets: Class 1
