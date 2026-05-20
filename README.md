@@ -161,4 +161,12 @@ The final trained weights, parameter blocks, and 8-bit simulation configurations
 * **Asset Payload:** Fully tracked model weights checkpoint (`volumetric_ptv3_qat_8bit.pth`) and optimized compiled graph layer configurations. 
 ### Compute Profile Metrics 
 - **Total Operational Runtime:** 15 Hours (Full training run + multi-stage spatial validation sweeps) 
-- **Optimization Overhead:** Includes active INT8 tensor range calibration constraints. 
+- **Optimization Overhead:** Includes active INT8 tensor range calibration constraints.
+
+## References & Literature Baseline
+
+Our architecture translates core breakthroughs from the following foundational works into an edge-optimized deployment pipeline:
+
+1. **Point Transformer V3:** Utilized for sparse spatial feature extraction blocks across irregular 3D coordinate distributions.
+2. **Deep Residual Learning (ResNet):** Shortcut mapping Topologies adapted to sustain stable gradient flow across the 128-channel dense feature layers.
+3. **Quantization-Aware Training (QAT):** Implemented simulated integer-arithmetic optimization loops to guarantee low-latency edge deployment viability.
