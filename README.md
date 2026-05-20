@@ -126,3 +126,36 @@ The architecture has been completely optimized and exported for hardware-acceler
 - **Target Platform:** Qualcomm Cloud AI 100 Ultra / Standard 
 - **Graph Format:** Static ONNX Opset 16 (Frozen 1x8192x14 Matrix) 
 - **Optimization Matrix:** Native 128-Channel Deep Residual Shortcuts with 8-bit Quantization-Aware Training (QAT) simulation rules. 
+
+## Dataset Metrics & Reproducibility Pipeline
+
+### 1. Source Material & Ingestion Bounds
+The architecture is verified using the **Dayton Aerial LiDAR Elevation Subsets (DALES)** dataset, an open-access, heavily benchmarked 3D semantic segmentation resource collected via airborne laser swaths.
+* **Licensing:** Creative Commons Attribution 4.0 International (CC BY 4.0).
+* **Ingestion Process:** 1. Register and request raw asset access via the official University of Dayton DALES repository portal.
+  2. Download the geographic tile collections (`.las` format strings).
+  3. Structure the asset arrays locally matching the path trees: `data/raw/train/` and `data/raw/test/`.
+
+### 2. Experiment Tracking & Logging Core
+The training execution pipeline uses unified metrics hooks to stream model convergence parameters. To review the live learning rate graphs, gradient distributions, and step-wise loss minimization trajectories, access the project tracking dashboard:
+* **Logging Integration:** Weights & Biases (W&B) Framework APIs.
+* **Core Monitored Targets:** Cross-Entropy Training Loss Floor, Per-Class Intersection over Union (IoU), and Step-Wise Hardware Memory Footprint Scaling.
+
+### 3. Model Ablation Analysis
+To confirm the absolute performance impact of each structural addition, the network went through systematic optimization phases under frozen hyperparameter constraints:
+
+| Pipeline Iteration Stage | Input Processing Vector Space | Model Architecture Parameters | Realized Metric Performance | Target Deployment Readiness |
+| :--- | :--- | :--- | :--- | :--- |
+| **Baseline Run** | File-Isolated Min-Max Scaling | Shallow Linear (64 Channels) | 8.58% Validation mIoU | Unstable / High Vector Variance |
+| **Contextual Expansion** | Global Standardization ($k=8$) | Shallow Linear (64 Channels) | 21.40% Validation mIoU | Mitigated Boundary Outliers |
+| **Capacity Leap** | Global Standardization ($k=8$) | Deep Residual (128 Channels) | **37.22% Validation mIoU** | Converged (Weights Archived) |
+| **Hardware Freeze** | Fixed-Point Inference Engine | Static Graph (ONNX Opset 16) | **36.98% Validation mIoU** | Qualcomm Cloud AI 100 Target Ready |
+
+---
+
+## Community Asset Hub (HuggingFace Integration)
+
+The final trained weights, parameter blocks, and 8-bit simulation configurations for the 128-channel Deep Residual network iteration are hosted publicly on the HuggingFace Model Hub for immediate download, testing, and deployment integration.
+
+* **Repository Handle:** `debanjan06/volumetric-ptv3-qat-8bit`
+* **Asset Payload:** Fully tracked model weights checkpoint (`volumetric_ptv3_qat_8bit.pth`) and optimized compiled graph layer configurations.
