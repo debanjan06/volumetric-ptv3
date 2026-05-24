@@ -19,7 +19,7 @@ The pipeline features an automated scene reconstruction engine that ingests dens
 
 ## Technical Pipeline Optimization Matrix
 
-* **Total Dataset Volume:** ~11 GB raw airborne LiDAR data / 505+ Million spatial points (Dayton urban canopy scan)
+* **Total Dataset Volume:** ~15 GB raw airborne LiDAR data / 505+ Million spatial points (Dayton urban canopy scan)
 * **Evaluation Scale:** 2,883,584 dense point vectors across 11 out-of-sample test assets
 
 | Pipeline Iteration Stage | Target Architecture Parameters | Input Processing Vector Space | Realized Metric Performance | Deployment Readiness Status |
