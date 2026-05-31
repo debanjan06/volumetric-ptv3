@@ -46,4 +46,4 @@ jobs:
       run: ruff format --check .
 
     - name: Execute Model and Quantization Tests
-      run: pytest --verbose
+      run: pytest src/ -o python_files="*_test.py" --verbose
